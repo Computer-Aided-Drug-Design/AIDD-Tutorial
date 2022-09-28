@@ -4,7 +4,7 @@
 
 project = '人工智能药物设计教程'
 author = '2022, Abdusemi Abduweli'
-
+copyright ='😜'
 release = ''
 version = ''
 
