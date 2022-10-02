@@ -1,112 +1,154 @@
 使用 TensorFlow 和 PyTorch 创建模型
 ===============================================
 
-`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Working_With_Datasets.ipynb>`_
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Creating_Models_with_TensorFlow_and_PyTorch.ipynb>`_
 
 `Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/%E4%BD%BF%E7%94%A8%20TensorFlow%20%E5%92%8C%20PyTorch%20%E5%88%9B%E5%BB%BA%E6%A8%A1%E5%9E%8B.ipynb>`_
 
 `Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/%E4%BD%BF%E7%94%A8%20TensorFlow%20%E5%92%8C%20PyTorch%20%E5%88%9B%E5%BB%BA%E6%A8%A1%E5%9E%8B.ipynb>`_
 
-数据是机器学习的核心。本教程将介绍DeepChem用于存储和管理数据的“Dataset”类。它为高效地处理大量数据提供了简单但强大的工具。它还被设计成易于与其他流行的Python框架交互，如NumPy、Pandas、TensorFlow和PyTorch。
+在之前的教程中，我们使用的是 DeepChem 提供的标准模型。这对于许多应用来说都没问题，但是迟早你会希望使用你自己定义的体系结构创建一个全新的模型。DeepChem提供了与 TensorFlow (Keras) 和 PyTorch 的集成，所以你可以在这两个框架的模型中使用它。
 
-数据集的结构
-----------------------------
+实际上，在DeepChem中使用TensorFlow或PyTorch模型时，你可以采用两种不同的方法。这取决于你是想使用TensorFlow/PyTorch APIs 还是DeepChem APIs 来训练和评估你的模型。对于前一种情况，DeepChem的 `Dataset` 类有一些方法可以方便地将其与其他框架一起使用。 `make_tf_dataset()` 返回一个遍历数据的 `tensorflow.data.Dataset` 对象。 `make_pytorch_dataset()` 返回一个遍历数据的 `torch.utils.data.IterableDataset` 对象。这让你可以使用 DeepChem 的数据集（datasets）、加载器（loaders）、特征器（featurizers）、变换器（transformers）、拆分器（splitters）等，并轻松将它们集成到你现有的 TensorFlow 或 PyTorch 代码中。
 
-在上一个教程中，我们加载了关于化合物溶解度的Delaney数据集。现在，让我们再次加载它。
+但 DeepChem 还提供了许多其他有用的功能。另一种让你使用这些功能的方法是将你的模型包装在一个 DeepChem 的 `Model` 对象中。让我们看看如何做到这一点。
+
+KerasModel
+------------------
+
+`KerasModel` 是DeepChem `Model` 类的子类。它充当 `tensorflow.keras.Model` 的包装器。让我们看一个使用它的例子。对于本例，我们创建了一个由两个密集层组成的简单顺序（sequential）模型。
 
 .. code-block:: Python
 
-    tasks, datasets, transformers = dc.molnet.load_delaney(featurizer='GraphConv')
+    import deepchem as dc
+    import tensorflow as tf
+
+    keras_model = tf.keras.Sequential([
+        tf.keras.layers.Dense(1000, activation='relu'),
+        tf.keras.layers.Dropout(rate=0.5),
+        tf.keras.layers.Dense(1)
+    ])
+    model = dc.models.KerasModel(keras_model, dc.models.losses.L2Loss())
+
+对于本例，我们使用了Keras的 `Sequential` 类。我们的模型由一个具有 ReLU 激活的密集层、50% 的 dropout 提供正则化和最后一个产生标量输出的层组成。我们还需要指定在训练模型时使用的损失函数，在本例中 :math:`L^2` 损失。我们现在可以训练和评估该模型，就像我们对任何其他 DeepChem 模型一样。例如，让我们加载 Delaney 溶解度数据集。我们的模型如何基于分子的扩展连通性指纹 (ECFPs) 来预测分子的溶解性?
+
+.. code-block:: Python
+
+    tasks, datasets, transformers = dc.molnet.load_delaney(featurizer='ECFP', splitter='random')
     train_dataset, valid_dataset, test_dataset = datasets
+    model.fit(train_dataset, nb_epoch=50)
+    metric = dc.metrics.Metric(dc.metrics.pearson_r2_score)
+    print('training set score:', model.evaluate(train_dataset, [metric]))
+    print('test set score:', model.evaluate(test_dataset, [metric]))
 
-我们现在有三个Dataset对象:训练集、验证集和测试集。它们各自包含什么信息?我们可以先打印出其中一个的字符串表示形式。
+TorchModel
+-------------------
 
-.. code-block:: Python
-
-    print(test_dataset)
-
-这里有很多信息，所以让我们从头开始。它以标签“DiskDataset”开始。Dataset是一个抽象类。它有几个子类，对应于存储数据的不同方式。
-
-- `DiskDataset` 是一个已经保存到硬盘上的数据集。数据以一种可以高效访问的方式储存在电脑上，即使数据的总量远远大于计算机的内存。
-- `NumpyDataset` 是一个存在于内存的数据集，它将所有数据保存在NumPy数组中。当操作可以完全放入内存的中小型数据集时，它是一个有用的工具。
-- `ImageDataset` 是一个更专门的类，它存储部分或所有在硬盘上的图像文件数据。在处理以图像作为输入或输出的模型时，它非常有用。
-
-现在让我们讨论数据集的内容。每个数据集存储 *样本（samples）* 列表。非常粗略地说，一个样本是单个数据点。现在的情况下，每个样本都是一个分子。在其他数据集中，一个样本可能对应于一个实验测定数据、一个细胞系、一张图像或许多其他东西。对于每个样本，数据集存储以下信息。
-
-- *特征*，被称为“X”。这个用来作为样本输入到模型中。
-- *标签*，称为“y”。这个是我们希望模型输出的。在训练过程中，模型试图使每个样本的输出尽可能接近“y”。
-- *权重*，称为“w”。这个用来表示某些数据值比其他数据值更重要。在后面的教程中，我们将看到一些巧妙使用了权重的例子。
-- *ID*，是样本的唯一标识符。它可以是任何东西，只要它是唯一的。有时它只是一个整数索引，但在这个数据集中，ID是描述分子的SMILES字符串。
-
-注意， **X** 、 **y** 和 **w** 的第一个维度的大小都是113。这意味着该数据集包含113个样本。
-
-打印输出中列出的最后一条信息是 **task_names**。有些数据集包含对应于每个样本的多条信息。例如，如果一个样本代表一个分子，那么数据集可能会记录针对该分子的几个不同实验的结果。但这个数据集只有一个任务(task):“测量的 log(溶解度), 单位为摩尔/升)”。还要注意 **y** 和 **w** 都有形状(113,1)。这些数组的第二个维度通常与任务的数量相匹配。
-
-从数据集访问数据
-----------------------------------
-
-有许多方法可以访问数据集中包含的数据。最简单的方法是直接访问 **X** ， **y**， **w** 和 **ids** 属性。每一个都以NumPy数组的形式返回相应的信息。
+`TorchModel` 的工作原理与 `KerasModel` 类似，只不过它包装了一个 `torch.nn.Module`。让我们使用PyTorch来创建另一个模型，就像前面的模型一样，并用相同的数据训练它。
 
 .. code-block:: Python
 
-    print(test_dataset.X)
+    import torch
 
-这是一种非常简单的访问数据方法，但是在使用它时应该非常小心。这需要将所有样本的数据同时加载到内存中。这对于像这样的小型数据集来说没什么问题，但对于大型数据集，它很容易占用比计算机所拥有的更多的内存。
+    pytorch_model = torch.nn.Sequential(
+        torch.nn.Linear(1024, 1000),
+        torch.nn.ReLU(),
+        torch.nn.Dropout(0.5),
+        torch.nn.Linear(1000, 1)
+    )
+    model = dc.models.TorchModel(pytorch_model, dc.models.losses.L2Loss())
 
-更好的方法是遍历数据集。这让它每次只加载一点数据，处理它，然后在加载下一个部分之前释放内存。你可以使用 **itersamples()** 方法一次遍历一个样本。
+    model.fit(train_dataset, nb_epoch=50)
+    print('training set score:', model.evaluate(train_dataset, [metric]))
+    print('test set score:', model.evaluate(test_dataset, [metric]))
 
-.. code-block:: Python
+损失的计算
+-----------
 
-    for X, y, w, id in test_dataset.itersamples():
-    print(X, y, w, id)
-    
-大多数深度学习模型可以同时处理一批多个样本。你可以使用 **iterbatch()** 来遍历每批次样本。
+现在让我们看一个更高级的例子。在上述模型中，损失是直接从模型的输出计算出来的。这通常是可以的，但并非总是如此。考虑一个输出概率分布的分类模型。虽然从概率中计算损失是可能的，但从 logits 中计算损失在数值上更稳定。
 
-.. code-block:: Python
+为此，我们创建一个返回多个输出的模型，包括概率和 logits。 `KerasModel` 和 `TorchModel` 让你指定一个“输出类型（output_types）”列表。如果一个特定的输出具有 `'prediction'` 类型，这意味着它是一个正常的输出，在调用 `predict()` 时应该返回。如果它有 `'loss'` 类型，这意味着它应该传递给损失函数，而不是正常的输出。
 
-    for X, y, w, ids in test_dataset.iterbatches(batch_size=50):
-    print(y.shape)
-    
-**iterbatch()** 在训练模型时还有其他有用的特性。例如， **iterbatch(batch_size=100, epoch =10, deterministic=False)** 将遍历整个数据集十次，每次都以不同的随机顺序。
-
-数据集还可以使用TensorFlow和PyTorch的标准接口访问数据。如果要获取 **tensorflow.data.Dataset** ，请调用 **make_tf_dataset()** 。如果要获取 **torch.utils.data.IterableDataset** ，请调用 **make_pytorch_dataset()** 。有关更多细节，请参阅API文档。
-
-最后一种访问数据的方法是 **to_dataframe()** 。这将数据复制到Pandas的 **DataFrame** 中。这需要一次性将所有数据存储在内存中，所以你应该只对小型数据集使用它。
-
-.. code-block:: Python
-
-    test_dataset.to_dataframe()
-
-创建数据集
-------------------------
-
-现在让我们谈谈如何创建自己的数据集。创建 **NumpyDataset** 非常简单:只需将包含数据的数组传递给构造函数。让我们创建一些随机数组，然后将它们包装在NumpyDataset中。
+顺序模型不允许多个输出，因此我们使用子类化样式模型（subclassing style model）。
 
 .. code-block:: Python
 
-    import numpy as np
+    class ClassificationModel(tf.keras.Model):
+        
+        def __init__(self):
+            super(ClassificationModel, self).__init__()
+            self.dense1 = tf.keras.layers.Dense(1000, activation='relu')
+            self.dense2 = tf.keras.layers.Dense(1)
 
-    X = np.random.random((10, 5))
-    y = np.random.random((10, 2))
-    dataset = dc.data.NumpyDataset(X=X, y=y)
-    print(dataset)
+        def call(self, inputs, training=False):
+            y = self.dense1(inputs)
+            if training:
+                y = tf.nn.dropout(y, 0.5)
+            logits = self.dense2(y)
+            output = tf.nn.sigmoid(logits)
+            return output, logits
 
-注意，我们没有指定权重或IDs。这些是可选的，就像 **y** 一样。 **NumpyDataset** 只要求 **X** 。因为我们没有给它们，它自动为我们构建 **w** 和 **IDs** 数组，将所有权重设置为1，并将IDs设置为整数索引。
+    keras_model = ClassificationModel()
+    output_types = ['prediction', 'loss']
+    model = dc.models.KerasModel(keras_model, dc.models.losses.SigmoidCrossEntropy(), output_types=output_types)
+
+我们可以在 BACE 数据集中训练我们的模型。这是一个二元分类任务，试图预测一个分子是否会抑制BACE-1酶。
 
 .. code-block:: Python
 
-    dataset.to_dataframe()
+    tasks, datasets, transformers = dc.molnet.load_bace_classification(feturizer='ECFP', splitter='scaffold')
+    train_dataset, valid_dataset, test_dataset = datasets
+    model.fit(train_dataset, nb_epoch=100)
+    metric = dc.metrics.Metric(dc.metrics.roc_auc_score)
+    print('training set score:', model.evaluate(train_dataset, [metric]))
+    print('test set score:', model.evaluate(test_dataset, [metric]))
 
-如何创建 DiskDataset ？ 如果数据在NumPy数组中，可以调用 **DiskDataset.from_numpy()** 将其保存到硬盘中。由于这只是一个教程，我们将把它保存到一个临时目录。
+类似地，我们将创建一个自定义的分类器模型类来与 `TorchModel` 一起使用。理由跟与上面的 `KerasModel` 相似，自定义模型允许轻松得到第二个密集层的未缩放输出(Tensorflow 中的 logits)。自定义类允许定义如何向前传递；在最终的sigmoid被应用产生预测之前得到 logits。
+
+最后，用一个需要概率和 logits 的 `ClassificationModel` 的实例与一个损失函数搭配生成一个 `TorchModel` 的实例进行训练。
 
 .. code-block:: Python
 
-    import tempfile
+    class ClassificationModel(torch.nn.Module):
+        
+        def __init__(self):
+            super(ClassificationModel, self).__init__()
+            self.dense1 = torch.nn.Linear(1024, 1000)
+            self.dense2 = torch.nn.Linear(1000, 1)
 
-    with tempfile.TemporaryDirectory() as data_dir:
-        disk_dataset = dc.data.DiskDataset.from_numpy(X=X, y=y, data_dir=data_dir)
-        print(disk_dataset)
+        def forward(self, inputs):
+            y = torch.nn.functional.relu( self.dense1(inputs) )
+            y = torch.nn.functional.dropout(y, p=0.5, training=self.training)
+            logits = self.dense2(y)
+            output = torch.sigmoid(logits)
+            return output, logits
 
-内存无法容纳的大型数据集怎么办?如果你在硬盘上有一些包含数以亿计分子数据的巨大文件呢?从它们创建 DiskDataset 的过程稍微复杂一些。幸运的是，DeepChem的 **DataLoader** 框架可以为你自动完成大部分工作。这是一个大的主题，所以我们将在后面的教程中讨论。
+    torch_model = ClassificationModel()
+    output_types = ['prediction', 'loss']
+    model = dc.models.TorchModel(torch_model, dc.models.losses.SigmoidCrossEntropy(), output_types=output_types)
 
-完。
+我们将使用相同的 BACE 数据集。和以前一样，该模型将尝试进行二元分类任务，试图预测一个分子是否会抑制BACE-1酶。
+
+.. code-block:: Python
+
+    tasks, datasets, transformers = dc.molnet.load_bace_classification(feturizer='ECFP', splitter='scaffold')
+    train_dataset, valid_dataset, test_dataset = datasets
+    model.fit(train_dataset, nb_epoch=100)
+    metric = dc.metrics.Metric(dc.metrics.roc_auc_score)
+    print('training set score:', model.evaluate(train_dataset, [metric]))
+    print('test set score:', model.evaluate(test_dataset, [metric]))
+
+其他功能
+---------
+
+`KerasModel` 和 `TorchModel` 有很多其他的功能。下面列一些比较重要的。
+
+- 训练过程中自动保存检查点（checkpoints）。
+- 将进度记录到控制台（console）或者传送到 `TensorBoard <https://www.tensorflow.org/tensorboard>`_ 或 `Weights & Biases <https://docs.wandb.com/>`_ 。
+- 以 `f(输出，标签，权重)` 的形式定义损失函数。
+- 使用 `ValidationCallback` 类来提前停止。
+- 从已训练的模型加载参数。
+- 估计模型输出的不确定性。
+- 通过显著性映射（saliency mapping）识别重要特征。
+
+通过将你自己的模型包装在 `KerasModel` 或 `TorchModel` 中，你就可以使用所有这些功能。有关它们的详细信息，请参阅API文档。
