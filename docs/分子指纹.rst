@@ -1,0 +1,74 @@
+分子指纹
+================================
+
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Molecular_Fingerprints.ipynb>`_ 
+
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/%E5%88%86%E5%AD%90%E6%8C%87%E7%BA%B9.ipynb>`_
+
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/%E5%88%86%E5%AD%90%E6%8C%87%E7%BA%B9.ipynb>`_
+
+分子可以用多种方式表示。本教程介绍一种称为“分子指纹”的表示类型。这是一种非常简单的表示，通常适用于小的类药物分子。
+
+我们现在导入 `deepchem` 包来玩。
+
+.. code-block:: Python
+
+    import deepchem as dc
+
+什么是指纹?
+--------------
+
+深度学习模型几乎总是以数字数组作为输入。如果我们想用它们来处理分子，我们需要以某种方式将每个分子表示为一个或多个数字数组。
+
+许多(但不是所有)类型的模型要求它们的输入具有固定的大小。这对分子来说是一个挑战，因为不同的分子有不同数量的原子。如果我们想使用这些类型的模型，我们需要用固定大小的数组来表示大小不一样的分子。
+
+指纹（fingerprints）的设计就是为了解决这些问题。指纹是一个固定长度的数组，其中不同的数位表示分子中存在不同的特征。如果两个分子有相似的指纹，这表明它们包含许多相同的特征，因此很可能具有相似的化学成分。
+
+DeepChem支持一种特殊类型的指纹，称为“扩展连接指纹（Extended Connectivity Fingerprint）”，简称“ECFP”。它们有时也被称为“圆形指纹”。ECFP算法首先根据原子的直接性质和化学键对其进行分类。每一个独特的图案都是一个特征。例如，“碳原子连接两个氢原子和两个重原子”将是一个特征，对于包含该特征的任何分子，指纹的一个特定数位被设置为1。然后，它通过观察更大的圆形邻域来迭代地识别新特征。一个特定的特征与另外两个特定的特征结合成为一个更高层次的特征，任何包含它的分子的分子指纹中对应的数位会被设置。这将持续进行固定数量的迭代，通常是两次。
+
+让我们来看一个使用ECFP的数据集。
+
+.. code-block:: Python
+
+    tasks, datasets, transformers = dc.molnet.load_tox21(featurizer='ECFP')
+    train_dataset, valid_dataset, test_dataset = datasets
+    print(train_dataset)
+
+特征数组 `X` 的形状为 (6264,1024)。这意味着在训练集中有6264个样本。每一个都由一个长度为1024的指纹表示。还要注意标签数组 `y` 的形状为(6264,12):这是一个多任务数据集。Tox21包含有关分子毒性的信息。12种不同的检测方法被用来寻找毒性迹象。数据集记录了所有12个试验的结果，每一个都作为不同的任务。
+
+让我们再看一下权重（weights）数组。
+
+.. code-block:: Python
+
+    train_dataset.w
+
+注意，有些元素是0。这些权重值用于指示丢失的数据。并不是所有的试验都是对每个分子进行的。将样本或样本/任务（tasks）对的权重设置为0将导致在拟合和评估期间忽略它。它不会对损失函数或其他指标产生影响。
+
+大多数其他权重都接近1，但不完全是1。这样做是为了平衡每个任务中正（positive）和负（negative）样本的总权重。在训练模型时，我们希望12个任务（tasks）中的每个任务都能做出同等的贡献，并且在每个任务上，我们希望对正样本和负样本给予同等的权重。否则，模型可能只知道大多数训练样本是无毒的，因此会倾向于识别其他分子是无毒的。
+
+基于指纹训练模型
+----------------
+
+让我们训练一个模型。在之前的教程中，我们使用了 `GraphConvModel` ，这是一个相当复杂的架构，需要一组复杂的输入（inputs）。因为指纹非常简单，只是一个固定长度的数组，我们可以使用一种更简单的模型类型。
+
+.. code-block:: Python
+
+    model = dc.models.MultitaskClassifier(n_tasks=12, n_features=1024, layer_sizes=[1000])
+
+`MultitaskClassifier` 是一个简单的全连接层堆栈。在这个例子中，我们告诉它使用一个具有1000个神经元的隐藏层。我们还告诉它，每个输入将有1024个特征，并且它应该为12个不同的任务产生预测。
+
+为什么不为每个任务训练一个单独的模型呢？我们可以这样做，但事实证明，训练一个多任务模型通常效果更好。我们将在后面的教程中看到其中一个例子。
+
+让我们对模型进行训练和评估。
+
+.. code-block:: Python
+
+    import numpy as np
+
+    model.fit(train_dataset, nb_epoch=10)
+    metric = dc.metrics.Metric(dc.metrics.roc_auc_score)
+    print('training set score:', model.evaluate(train_dataset, [metric], transformers))
+    print('test set score:', model.evaluate(test_dataset, [metric], transformers))
+
+对于如此简单的模型和特征化来说，这是不错的结果。更复杂的模型在这个数据集上的表现稍好一些，但并不是非常好。
+

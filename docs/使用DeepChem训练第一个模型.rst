@@ -1,10 +1,11 @@
-深度生命科学的基础工具 The Basic Tools of the Deep Life Sciences
-======================================================================
+使用DeepChem训练第一个模型
+================================
 
 `Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/The_Basic_Tools_of_the_Deep_Life_Sciences.ipynb>`_
 
-使用DeepChem训练第一个模型
-------------------------------
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/%E4%BD%BF%E7%94%A8DeepChem%E8%AE%AD%E7%BB%83%E7%AC%AC%E4%B8%80%E4%B8%AA%E6%A8%A1%E5%9E%8B.ipynb>`_
+
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/%E4%BD%BF%E7%94%A8DeepChem%E8%AE%AD%E7%BB%83%E7%AC%AC%E4%B8%80%E4%B8%AA%E6%A8%A1%E5%9E%8B.ipynb>`_
 
 深度学习可以用来解决许多类型的问题，但基本工作流程通常是相同的。以下是你可以遵循的典型步骤。
 
@@ -24,7 +25,7 @@
     tasks, datasets, transformers = dc.molnet.load_delaney(featurizer='GraphConv')
     train_dataset, valid_dataset, test_dataset = datasets
 
-我现在不会对这段代码解释太多。我们将在后面的教程中看到许多类似的例子。有两个细节我想让你注意一下。首先，注意传递给' load_delaney() '函数的' featurizer '参数。分子可以用多种方式表示。因此，我们告诉它我们想要使用哪种方式表示，或者用更专业的语言来说，如何“特征化（featurizer）”数据。其次，注意我们实际上得到了三个不同的数据集:训练集、验证集和测试集（分别对应 train_dataset, valid_dataset, test_dataset ）。在标准的深度学习工作流程中，每一个数据集都有不同的功能。
+我现在不会对这段代码解释太多。我们将在后面的教程中看到许多类似的例子。有两个细节我想让你注意一下。首先，注意传递给' load_delaney() '函数的' featurizer '参数。分子可以用多种方式表示。因此，我们告诉它我们想要使用哪种方式表示，或者用更专业的语言来说，如何“特征器（featurizer）”数据。其次，注意我们实际上得到了三个不同的数据集:训练集、验证集和测试集（分别对应 train_dataset, valid_dataset, test_dataset ）。在标准的深度学习工作流程中，每一个数据集都有不同的功能。
 
 现在我们有了数据集，下一步是建立一个模型。我们将使用一种特殊的模型，称为“图卷积网络（graph convolutional network）”，简称为“graphconv”。
 

@@ -13,4 +13,8 @@
 
 .. toctree::
     DeepChem
-    The Basic Tools of the Deep Life Sciences
+    使用DeepChem训练第一个模型
+    处理数据集
+    对 MoleculeNet 的介绍
+    分子指纹
+    使用 TensorFlow 和 PyTorch 创建模型

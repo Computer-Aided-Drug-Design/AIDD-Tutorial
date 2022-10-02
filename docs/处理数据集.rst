@@ -1,0 +1,112 @@
+处理数据集
+================================
+
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Working_With_Datasets.ipynb>`_
+
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/%E5%A4%84%E7%90%86%E6%95%B0%E6%8D%AE%E9%9B%86.ipynb>`_
+
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/%E5%A4%84%E7%90%86%E6%95%B0%E6%8D%AE%E9%9B%86.ipynb>`_
+
+数据是机器学习的核心。本教程将介绍DeepChem用于存储和管理数据的“Dataset”类。它为高效地处理大量数据提供了简单但强大的工具。它还被设计成易于与其他流行的Python框架交互，如NumPy、Pandas、TensorFlow和PyTorch。
+
+数据集的结构
+----------------------------
+
+在上一个教程中，我们加载了关于化合物溶解度的Delaney数据集。现在，让我们再次加载它。
+
+.. code-block:: Python
+
+    tasks, datasets, transformers = dc.molnet.load_delaney(featurizer='GraphConv')
+    train_dataset, valid_dataset, test_dataset = datasets
+
+我们现在有三个Dataset对象:训练集、验证集和测试集。它们各自包含什么信息?我们可以先打印出其中一个的字符串表示形式。
+
+.. code-block:: Python
+
+    print(test_dataset)
+
+这里有很多信息，所以让我们从头开始。它以标签“DiskDataset”开始。Dataset是一个抽象类。它有几个子类，对应于存储数据的不同方式。
+
+- `DiskDataset` 是一个已经保存到硬盘上的数据集。数据以一种可以高效访问的方式储存在电脑上，即使数据的总量远远大于计算机的内存。
+- `NumpyDataset` 是一个存在于内存的数据集，它将所有数据保存在NumPy数组中。当操作可以完全放入内存的中小型数据集时，它是一个有用的工具。
+- `ImageDataset` 是一个更专门的类，它存储部分或所有在硬盘上的图像文件数据。在处理以图像作为输入或输出的模型时，它非常有用。
+
+现在让我们讨论数据集的内容。每个数据集存储 *样本（samples）* 列表。非常粗略地说，一个样本是单个数据点。现在的情况下，每个样本都是一个分子。在其他数据集中，一个样本可能对应于一个实验测定数据、一个细胞系、一张图像或许多其他东西。对于每个样本，数据集存储以下信息。
+
+- *特征*，被称为“X”。这个用来作为样本输入到模型中。
+- *标签*，称为“y”。这个是我们希望模型输出的。在训练过程中，模型试图使每个样本的输出尽可能接近“y”。
+- *权重*，称为“w”。这个用来表示某些数据值比其他数据值更重要。在后面的教程中，我们将看到一些巧妙使用了权重的例子。
+- *ID*，是样本的唯一标识符。它可以是任何东西，只要它是唯一的。有时它只是一个整数索引，但在这个数据集中，ID是描述分子的SMILES字符串。
+
+注意， **X** 、 **y** 和 **w** 的第一个维度的大小都是113。这意味着该数据集包含113个样本。
+
+打印输出中列出的最后一条信息是 **task_names**。有些数据集包含对应于每个样本的多条信息。例如，如果一个样本代表一个分子，那么数据集可能会记录针对该分子的几个不同实验的结果。但这个数据集只有一个任务(task):“测量的 log(溶解度), 单位为摩尔/升)”。还要注意 **y** 和 **w** 都有形状(113,1)。这些数组的第二个维度通常与任务的数量相匹配。
+
+从数据集访问数据
+----------------------------------
+
+有许多方法可以访问数据集中包含的数据。最简单的方法是直接访问 **X** ， **y**， **w** 和 **ids** 属性。每一个都以NumPy数组的形式返回相应的信息。
+
+.. code-block:: Python
+
+    print(test_dataset.X)
+
+这是一种非常简单的访问数据方法，但是在使用它时应该非常小心。这需要将所有样本的数据同时加载到内存中。这对于像这样的小型数据集来说没什么问题，但对于大型数据集，它很容易占用比计算机所拥有的更多的内存。
+
+更好的方法是遍历数据集。这让它每次只加载一点数据，处理它，然后在加载下一个部分之前释放内存。你可以使用 **itersamples()** 方法一次遍历一个样本。
+
+.. code-block:: Python
+
+    for X, y, w, id in test_dataset.itersamples():
+    print(X, y, w, id)
+    
+大多数深度学习模型可以同时处理一批多个样本。你可以使用 **iterbatch()** 来遍历每批次样本。
+
+.. code-block:: Python
+
+    for X, y, w, ids in test_dataset.iterbatches(batch_size=50):
+    print(y.shape)
+    
+**iterbatch()** 在训练模型时还有其他有用的特性。例如， **iterbatch(batch_size=100, epoch =10, deterministic=False)** 将遍历整个数据集十次，每次都以不同的随机顺序。
+
+数据集还可以使用TensorFlow和PyTorch的标准接口访问数据。如果要获取 **tensorflow.data.Dataset** ，请调用 **make_tf_dataset()** 。如果要获取 **torch.utils.data.IterableDataset** ，请调用 **make_pytorch_dataset()** 。有关更多细节，请参阅API文档。
+
+最后一种访问数据的方法是 **to_dataframe()** 。这将数据复制到Pandas的 **DataFrame** 中。这需要一次性将所有数据存储在内存中，所以你应该只对小型数据集使用它。
+
+.. code-block:: Python
+
+    test_dataset.to_dataframe()
+
+创建数据集
+------------------------
+
+现在让我们谈谈如何创建自己的数据集。创建 **NumpyDataset** 非常简单:只需将包含数据的数组传递给构造函数。让我们创建一些随机数组，然后将它们包装在NumpyDataset中。
+
+.. code-block:: Python
+
+    import numpy as np
+
+    X = np.random.random((10, 5))
+    y = np.random.random((10, 2))
+    dataset = dc.data.NumpyDataset(X=X, y=y)
+    print(dataset)
+
+注意，我们没有指定权重或IDs。这些是可选的，就像 **y** 一样。 **NumpyDataset** 只要求 **X** 。因为我们没有给它们，它自动为我们构建 **w** 和 **IDs** 数组，将所有权重设置为1，并将IDs设置为整数索引。
+
+.. code-block:: Python
+
+    dataset.to_dataframe()
+
+如何创建 DiskDataset ？ 如果数据在NumPy数组中，可以调用 **DiskDataset.from_numpy()** 将其保存到硬盘中。由于这只是一个教程，我们将把它保存到一个临时目录。
+
+.. code-block:: Python
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as data_dir:
+        disk_dataset = dc.data.DiskDataset.from_numpy(X=X, y=y, data_dir=data_dir)
+        print(disk_dataset)
+
+内存无法容纳的大型数据集怎么办?如果你在硬盘上有一些包含数以亿计分子数据的巨大文件呢?从它们创建 DiskDataset 的过程稍微复杂一些。幸运的是，DeepChem的 **DataLoader** 框架可以为你自动完成大部分工作。这是一个大的主题，所以我们将在后面的教程中讨论。
+
+完。
