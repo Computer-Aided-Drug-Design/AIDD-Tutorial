@@ -18,3 +18,5 @@
     对 MoleculeNet 的介绍
     分子指纹
     使用 TensorFlow 和 PyTorch 创建模型
+    图卷积的介绍
+    深入分子特征化

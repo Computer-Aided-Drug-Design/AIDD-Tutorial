@@ -1,0 +1,156 @@
+图卷积（Graph convolutions）的介绍
+===============================================
+
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Introduction_to_Graph_Convolutions.ipynb>`_
+
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/%E5%9B%BE%E5%8D%B7%E7%A7%AF%E7%9A%84%E4%BB%8B%E7%BB%8D.ipynb>`_
+
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/%E5%9B%BE%E5%8D%B7%E7%A7%AF%E7%9A%84%E4%BB%8B%E7%BB%8D.ipynb>`_
+
+在本教程中，我们将学习更多关于“图卷积”的知识。这是处理分子数据最强大的深度学习工具之一。这样做的原因是分子可以很自然地被看作图形。
+
+.. image:: 
+    https://github.com/deepchem/deepchem/blob/master/examples/tutorials/assets/basic_graphs.gif?raw=1
+
+请注意，我们从高中开始习惯的那种标准化学图表是如何自然地将分子可视化为图表的。在本教程的其余部分中，我们将更详细地挖掘这种关系。这将让我们更深入地了解这些系统是如何工作的。
+
+什么是图卷积？
+------------------
+
+考虑一种通常用于处理图像的标准卷积神经网络(CNN)。输入是一个像素网格。每个像素都有一个向量，例如包含红色、绿色和蓝色通道值。数据经过一系列的卷积层。每一层都将来自像素及其邻居的数据结合起来，为像素生成一个新的数据向量。早期的层发现小规模的局部图案，而后期的层发现更大、更抽象的图案。卷积层通常与池化层交替，池化层在局部区域上执行一些操作，如筛选出最大值或最小值。
+
+图卷积与之相似，但它们作用于图表上。它们从图表每个节点的数据向量开始(例如，该节点所代表的原子的化学性质)。卷积层和池化层将来自相互连接的节点(例如，相互连接的原子)的信息结合起来，生成一个新的数据向量作为新的节点。
+
+训练一个GraphConvModel
+----------------------------
+
+让我们使用 MoleculeNet 套件来加载 Tox21 数据集。为了以图卷积网络可以使用的方式特征化数据，我们将特征器选项设置为 `'GraphConv'` 。MoleculeNet 调用返回一个训练集、一个验证集和一个测试集供我们使用。它还返回 `tasks` (任务名称的列表)和 `transformers` (用于预处理数据集的数据变换器的列表)。(大多数深度网络相当挑剔，需要一组数据变换器来确保训练的稳定进行。)
+
+.. code-block:: Python
+
+    import deepchem as dc
+
+    tasks, datasets, transformers = dc.molnet.load_tox21(featurizer='GraphConv')
+    train_dataset, valid_dataset, test_dataset = datasets
+
+现在让我们在这个数据集上训练一个图卷积网络。DeepChem 有一个名为 `GraphConvModel` 的类，它在底层封装了一个标准的图卷积架构，方便用户使用。让我们实例化该类的一个对象，并在数据集上训练它。
+
+.. code-block:: Python
+
+    n_tasks = len(tasks)
+    model = dc.models.GraphConvModel(n_tasks, mode='classification')
+    model.fit(train_dataset, nb_epoch=50)
+
+让我们试着评估我们训练过的模型的性能。为此，我们需要定义一个衡量标准，衡量一个模型性能的标准。 `dc.metrics` 是一些衡量标准的集合。对于这个数据集，使用 ROC-AUC 评分是标准的，即受试者工作特征曲线(测量精度和召回率之间的权衡)下的面积。幸运的是，DeepChem 已经提供了 ROC-AUC 评分。
+
+为了在此衡量标准下衡量模型的性能，我们可以使用函数 `model.evaluate()` 。
+
+.. code-block:: Python
+
+    metric = dc.metrics.Metric(dc.metrics.roc_auc_score)
+    print('Training set score:', model.evaluate(train_dataset, [metric], transformers))
+    print('Test set score:', model.evaluate(test_dataset, [metric], transformers))
+
+结果非常好， `GraphConvModel` 非常容易使用。但这模型下到底发生了什么？我们可以自己构建 GraphConvModel 吗？当然可以！DeepChem为图卷积中涉及的所有计算提供Keras层。我们将使用来自 DeepChem 的以下层。
+
+- `GraphConv` 层：该层实现了图卷积。图卷积以一种非线性的方式将每个节点的特征向量与相邻节点的特征向量结合起来。它“混合”在一个图的局部区域中的信息。
+
+- `GraphPool` 层：该层对某区域内原子的特征向量进行最大池化。你可以将此层看作类似于二维卷积的最大池化层，但它对图表进行操作。
+
+- `GraphGather` ：许多图卷积网络对每个图标节点的特征向量进行操作。例如，对于一个分子，每个节点可能代表一个原子，网络操作代表原子的局部化学性质的特征向量。然而，最终，我们可能需要使用分子级别的特征表示。该层通过组合所有节点的特征向量来创建一个图标级别的特征向量。
+
+除此之外，我们还将应用标准的神经网络层，如 `Dense <https://keras.io/api/layers/core_layers/dense/>`_ 、 `BatchNormalization <https://keras.io/api/layers/normalization_layers/batch_normalization/>`_ 和 `Softmax <https://keras.io/api/layers/activation_layers/softmax/>`_ 层。
+
+.. code-block:: Python
+
+    from deepchem.models.layers import GraphConv, GraphPool, GraphGather
+    import tensorflow as tf
+    import tensorflow.keras.layers as layers
+
+    batch_size = 100
+
+    class MyGraphConvModel(tf.keras.Model):
+
+    def __init__(self):
+        super(MyGraphConvModel, self).__init__()
+        self.gc1 = GraphConv(128, activation_fn=tf.nn.tanh)
+        self.batch_norm1 = layers.BatchNormalization()
+        self.gp1 = GraphPool()
+
+        self.gc2 = GraphConv(128, activation_fn=tf.nn.tanh)
+        self.batch_norm2 = layers.BatchNormalization()
+        self.gp2 = GraphPool()
+
+        self.dense1 = layers.Dense(256, activation=tf.nn.tanh)
+        self.batch_norm3 = layers.BatchNormalization()
+        self.readout = GraphGather(batch_size=batch_size, activation_fn=tf.nn.tanh)
+
+        self.dense2 = layers.Dense(n_tasks*2)
+        self.logits = layers.Reshape((n_tasks, 2))
+        self.softmax = layers.Softmax()
+
+    def call(self, inputs):
+        gc1_output = self.gc1(inputs)
+        batch_norm1_output = self.batch_norm1(gc1_output)
+        gp1_output = self.gp1([batch_norm1_output] + inputs[1:])
+
+        gc2_output = self.gc2([gp1_output] + inputs[1:])
+        batch_norm2_output = self.batch_norm1(gc2_output)
+        gp2_output = self.gp2([batch_norm2_output] + inputs[1:])
+
+        dense1_output = self.dense1(gp2_output)
+        batch_norm3_output = self.batch_norm3(dense1_output)
+        readout_output = self.readout([batch_norm3_output] + inputs[1:])
+
+        logits_output = self.logits(self.dense2(readout_output))
+        return self.softmax(logits_output)
+
+我们现在可以更清楚地看到正在发生的事情。有两个卷积块，每个块由一个 `GraphConv` 组成，然后是批正则化，然后是一个 `GraphPool` 来进行最大池化。最后，我们使用一个密集层、另一个批正则化、一个 `GraphGather` 来组合来自所有不同节点的数据，以及一个最终的密集层来生成最终输出。
+
+现在让我们创建 DeepChem模型，它将是我们刚刚创建的 Keras 模型的包装。我们还将指定损失函数，以便模型知道最小化的目标。
+
+.. code-block:: Python
+
+    model = dc.models.KerasModel(MyGraphConvModel(), loss=dc.models.losses.CategoricalCrossEntropy())
+
+这个模型的输入是什么？图卷积需要对每个分子的完整描述，包括节点(原子)的列表，以及哪些原子彼此相连的描述。事实上，如果我们检查数据集，我们会看到特征数组包含 `ConvMol` 类型的Python对象。
+
+.. code-block:: Python
+
+    print(test_dataset.X[0])
+
+模型期望数字数组作为输入，而不是Python对象。我们必须将 `ConvMol` 对象转换为 `GraphConv` 、 `GraphPool` 和 `GraphGather` 层所期望的特定数组集。幸运的是， `ConvMol` 类包含执行此操作的代码，以及将所有分子按批次合并以创建单个数组集的代码。
+
+下面的代码创建一个Python生成器，给定一组数据，它生成值为 Numpy 数组的输入、标签和权重列表。 `atom_features` 是长度为75的每个原子的特征向量。TensorFlow 要求其他输入支持小批处理。 `degree_slice` 是一个索引便利工具，可以方便地根据给定度数从所有分子中定位原子。 `membership` 表示分子跟分子中原子的隶属关系(原子 `i` 属于分子 `membership[i]` )。 `deg_adjs` 是一个列表，包含按原子度数分组的邻接表。要了解更多细节，请查看 `代码 <https://github.com/deepchem/deepchem/blob/master/deepchem/feat/mol_graphs.py>`_ 。
+
+.. code-block:: Python
+
+    from deepchem.metrics import to_one_hot
+    from deepchem.feat.mol_graphs import ConvMol
+    import numpy as np
+
+    def data_generator(dataset, epochs=1):
+    for ind, (X_b, y_b, w_b, ids_b) in enumerate(dataset.iterbatches(batch_size, epochs,
+                                                                    deterministic=False, pad_batches=True)):
+        multiConvMol = ConvMol.agglomerate_mols(X_b)
+        inputs = [multiConvMol.get_atom_features(), multiConvMol.deg_slice, np.array(multiConvMol.membership)]
+        for i in range(1, len(multiConvMol.get_deg_adjacency_lists())):
+        inputs.append(multiConvMol.get_deg_adjacency_lists()[i])
+        labels = [to_one_hot(y_b.flatten(), 2).reshape(-1, n_tasks, 2)]
+        weights = [w_b]
+        yield (inputs, labels, weights)
+
+现在，我们可以使用 `fit_generator(generator)` 来训练模型，它将使用我们已经定义的生成器来训练模型。
+
+.. code-block:: Python
+
+    model.fit_generator(data_generator(train_dataset, epochs=50))
+
+现在我们已经训练了我们的图卷积网络，让我们来评估它的性能。我们必须再次使用我们定义的生成器来评估模型的性能。
+
+.. code-block:: Python
+
+    print('Training set score:', model.evaluate_generator(data_generator(train_dataset), [metric], transformers))
+    print('Test set score:', model.evaluate_generator(data_generator(test_dataset), [metric], transformers))
+
+成功!我们构建的模型的行为与 `GraphConvModel` 几乎相同。如果你希望构建你自己的定制模型，你可以遵循我们在这里提供的示例来实现这一点。我们希望很快看到你方令人兴奋的工程!
