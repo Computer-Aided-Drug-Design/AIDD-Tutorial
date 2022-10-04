@@ -1,0 +1,109 @@
+使用拆分器（Splitters）
+===============================================
+
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Working_With_Splitters.ipynb>`_
+
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/%E6%B7%B1%E5%85%A5%E5%88%86%E5%AD%90%E7%89%B9%E5%BE%81%E5%8C%96.ipynb>`_
+
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/%E6%B7%B1%E5%85%A5%E5%88%86%E5%AD%90%E7%89%B9%E5%BE%81%E5%8C%96.ipynb>`_
+
+
+对分子数据进行机器学习的最重要步骤之一是将数据转换为适合应用在学习算法的形式。这个过程被广泛地称为“特征化”，包括将一个分子转化为某种向量或张量。有许多不同的方法可以做到这一点，特征化方法的选择通常取决于手头的问题。我们已经看到了两种这样的方法：分子指纹和用于图卷积的 `ConvMol` 对象。在本教程中，我们将讨论其他一些方法。
+
+特征器（Featurizers）
+-----------------------
+
+在 DeepChem 中，将分子(或任何其他类型的输入)特征化的方法由 `Featurizer` 对象定义。使用特征器有三种不同的方式。
+
+1. When using the MoleculeNet loader functions, you simply pass the name of the featurization method to use.  We have seen examples of this in earlier tutorials, such as `featurizer='ECFP'` or `featurizer='GraphConv'`.1. 在使用 MoleculeNet 加载器函数时，你只需传递要使用的特征化方法的名称。我们已经在之前的教程中看到过这样的例子，例如 `featurizer='ECFP'` 或 `featurizer='GraphConv'` 。
+
+2. 你也可以创建一个特征器，并直接应用到分子。例如:
+
+.. code-block:: Python
+
+    import deepchem as dc
+
+    featurizer = dc.feat.CircularFingerprint()
+    print(featurizer(['CC', 'CCC', 'CCO']))
+
+3. 在使用 DataLoader 框架创建新数据集时，可以指定用于处理数据的特征器。我们将在以后的教程中看到这一点。
+
+我们使用丙烷( :math:`CH_3CH_2CH_3` ，SMILES字符串 `'CCC'` )作为本教程的输入。许多特征化方法使用分子的构象异构体。可以使用 `deepchem.utils.conformers` 中的 `ConformerGenerator` 类生成构象异构体。
+
+RDKitDescriptors
+::::::::::::::::::
+
+`RDKitDescriptors` 通过使用RDKit计算描述符列表的值来描述一个分子。这些是基本的物理和化学性质：分子量，极性表面积，氢键供体和受体的数量等。这对于预测依赖于这些高级性质而不是详细的分子结构的性质是最有用的。
+
+特征器的本质是一组允许的描述符，可以使用 `RDKitDescriptors.allowedDescriptors` 来访问。此特征器使用 `rdkit.Chem.Descriptors.descList` 中的描述符，检查它们是否在允许的描述符列表中，并计算分子的描述符值。
+
+让我们打印出丙烷的前十个描述符的值。
+
+.. code-block:: Python
+
+    rdkit_featurizer = dc.feat.RDKitDescriptors()
+    features = rdkit_featurizer(['CCC'])[0]
+    for feature, descriptor in zip(features[:10], rdkit_featurizer.descriptors):
+        print(descriptor, feature)
+
+当然，还有比这更多的描述符。
+
+.. code-block:: Python
+
+    print('The number of descriptors present is: ', len(features))
+
+WeaveFeaturizer 和 MolGraphConvFeaturizer
+::::::::::::::::::::::::::::::::::::::::::::
+
+我们之前研究过图卷积，它使用 `ConvMolFeaturizer` 将分子转换为 `ConvMol` 对象。图卷积是将分子表示为图标的一类大型架构的一种特殊情况。它们的工作方式相似，但在细节上有所不同。例如，它们可能把原子或连接它们的键或这两者都用数据向量表示。他们可能会使用各种技术从前一层的数据向量计算出新的数据向量，并在最后使用各种技术计算分子级别的性质。
+
+DeepChem 支持许多不同的基于图表的模型。其中一些需要分子被以稍微不同的方式特征化。正因为如此，有另外两个特征器称为 `WeaveFeaturizer` 和 `MolGraphConvFeaturizer` 。它们各自将分子转换为特定模型使用的不同类型的Python对象。当使用任何基于于图表的模型时，只需检查文档，看看需要使用什么特征器。
+
+CoulombMatrix
+::::::::::::::::::
+
+到目前为止，我们所研究的所有模型都只考虑了分子的内在特性:组成分子的原子列表以及连接它们的键。当处理柔性分子时，你可能还想考虑分子可以呈现的不同构象。例如，当药物分子与蛋白质结合时，结合的强度取决于原子对之间的特定相互作用。为了预测结合强度，你可能需要考虑各种可能的构象，并在进行预测时使用将这些构象考虑在内的模型。
+
+库仑矩阵是分子构象的一种常用特征。回想一下，两个电荷之间的静电库仑相互作用与 :math:`q_1q_2/r` 成正比，其中 :math:`q_1和q_2` 是电荷， `r` 是它们之间的距离。对于一个有N原子的分子，库仑矩阵是一个 N × N 矩阵，其中每个元素给出了两个原子之间静电相互作用的强度。它包含了原子上的电荷和原子间距离的信息。更多关于函数形式的信息可以在 `这里 <https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.108.058301>`_ 找到。
+
+为了应用这个特征器，我们首先需要分子的一组构象。我们可以使用 `ConformerGenerator` 类来做到这一点。它取一个 RDKit 分子，生成一组能量最小化的构象，并对其进行修剪，使其只包含彼此显著不同的构象。让我们试试丙烷。
+
+.. code-block:: Python
+
+    from rdkit import Chem
+
+    generator = dc.utils.ConformerGenerator(max_conformers=5)
+    propane_mol = generator.generate_conformers(Chem.MolFromSmiles('CCC'))
+    print("Number of available conformers for propane: ", len(propane_mol.GetConformers()))
+
+它只找到了一个构象体。这并不奇怪，因为丙烷是一种非常小的分子，几乎没有任何灵活性。我们尝试再加一个碳。
+
+.. code-block:: Python
+
+    butane_mol = generator.generate_conformers(Chem.MolFromSmiles('CCCC'))
+    print("Number of available conformers for butane: ", len(butane_mol.GetConformers()))
+
+现在我们可以为分子创建库仑矩阵。
+
+.. code-block:: Python
+
+    coulomb_mat = dc.feat.CoulombMatrix(max_atoms=20)
+    features = coulomb_mat(propane_mol)
+    print(features)
+
+注意，许多元素都是0。为了将多个分子在一个批量中结合在一起，我们需要把所有的库仑矩阵都设为相同的大小，即使分子的原子数不同。我们指定了 `max_atoms=20`，因此返回的矩阵的大小为(20,20)。分子只有11个原子，所以只有11 × 11的子矩阵是非零的。
+
+CoulombMatrixEig
+:::::::::::::::::
+
+库仑矩阵的一个重要特征是它们不受分子旋转和平动的影响，因为原子间的距离和原子序数不改变。像这样尊重对称性使学习更容易。旋转一个分子并不改变它的物理性质。如果特征化确实发生了变化，那么模型将被迫认识到旋转并不重要，但如果特征化是不变的，那么模型将自动获得该属性。
+
+库仑矩阵在另一个重要的对称性下是变的：原子指标的排列。分子的物理性质与我们称之为“原子1”的原子无关，但库仑矩阵与之相关。为了解决这个问题，引入了 `CoulumbMatrixEig` 特征器，它使用库仑矩阵的特征值谱，对原子指标的随机排列是不变的。这种特征化的缺点是它包含的信息少得多(N 特征值而不是 N×N 矩阵)，因此模型可以学习的内容将受到更多限制。
+
+`CoulombMatrixEig` 继承 `CoulombMatrix` ，通过首先计算分子的不同构象的库仑矩阵，然后计算每个库仑矩阵的特征值来表征一个分子。然后这些特征值被填补以适应各个分子中原子数量的变化。
+
+.. code-block:: Python
+
+    coulomb_mat_eig = dc.feat.CoulombMatrixEig(max_atoms=20)
+    features = coulomb_mat_eig(propane_mol)
+    print(features)
