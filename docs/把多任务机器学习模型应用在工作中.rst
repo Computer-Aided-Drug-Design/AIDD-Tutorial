@@ -1,0 +1,54 @@
+把多任务机器学习模型应用在工作中
+===============================================
+
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Putting_Multitask_Learning_to_Work.ipynb>`_
+
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/把多任务机器学习模型应用在工作中.ipynb>`_
+
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/把多任务机器学习模型应用在工作中.ipynb>`_
+
+把多任务机器学习模型应用在工作中
+-------------------------------------
+
+本笔记本介绍了在MUV[1]上创建多任务模型的过程。目的是演示多任务方法如何在数据很少或非常不平衡的情况下提高性能。
+
+MUV 数据集是一个具有挑战性的分子设计基准，它由17个不同的“靶标”组成，每个靶标只有几个“活性”化合物。一共有93087种化合物，但没有一个任务的活性化合物超过30种，许多任务的活性化合物甚至更少。用如此少的正样本训练一个模型是非常具有挑战性的。多任务模型通过训练一个单一模型来解决这个问题，该模型可以同时预测所有不同的目标。如果一个特性对预测一个任务有用，那么它通常也对预测其他几个任务有用。每增加一个任务，就可以更容易地学习重要的特性，从而提高其他任务的性能[2]。
+
+首先，让我们加载 MUV 数据集。MoleculeNet 加载器函数自动将其分为训练集、验证集和测试集。由于正样本太少，我们使用 stratified 拆分器来确保测试集有足够的正样本进行评估。
+
+.. code-block:: Python
+
+    import deepchem as dc
+    import numpy as np
+
+    tasks, datasets, transformers = dc.molnet.load_muv(split='stratified')
+    train_dataset, valid_dataset, test_dataset = datasets
+
+现在让我们用它来训练一个模型。我们将使用 MultitaskClassifier，它是一个完全连接层的简单堆栈。
+
+.. code-block:: Python
+
+    n_tasks = len(tasks)
+    n_features = train_dataset.get_data_shape()[0]
+    model = dc.models.MultitaskClassifier(n_tasks, n_features)
+    model.fit(train_dataset)
+
+让我们看看它在测试集上的表现如何。我们循环这17个任务，并为每个任务计算 ROC AUC。
+
+.. code-block:: Python
+
+    y_true = test_dataset.y
+    y_pred = model.predict(test_dataset)
+    metric = dc.metrics.roc_auc_score
+    for i in range(n_tasks):
+        score = metric(dc.metrics.to_one_hot(y_true[:,i]), y_pred[:,i])
+        print(tasks[i], score)
+
+还不错!回想一下，随机猜测会产生0.5的ROC AUC分数，而一个完美的预测器会得到1.0分。大多数任务比随机猜测的表现要好得多，其中许多任务的得分都在0.9以上。
+
+参考书目
+----------
+
+[1] https://pubs.acs.org/doi/10.1021/ci8002649
+
+[2] https://pubs.acs.org/doi/abs/10.1021/acs.jcim.7b00146

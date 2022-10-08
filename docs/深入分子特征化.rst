@@ -15,7 +15,7 @@
 
 在 DeepChem 中，将分子(或任何其他类型的输入)特征化的方法由 `Featurizer` 对象定义。使用特征器有三种不同的方式。
 
-1. When using the MoleculeNet loader functions, you simply pass the name of the featurization method to use.  We have seen examples of this in earlier tutorials, such as `featurizer='ECFP'` or `featurizer='GraphConv'`.1. 在使用 MoleculeNet 加载器函数时，你只需传递要使用的特征化方法的名称。我们已经在之前的教程中看到过这样的例子，例如 `featurizer='ECFP'` 或 `featurizer='GraphConv'` 。
+1. 在使用 MoleculeNet 加载器函数时，你只需传递要使用的特征化方法的名称。我们已经在之前的教程中看到过这样的例子，例如 `featurizer='ECFP'` 或 `featurizer='GraphConv'` 。
 
 2. 你也可以创建一个特征器，并直接应用到分子。例如:
 

@@ -1,0 +1,85 @@
+高级模型训练
+===============================================
+
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Advanced_Model_Training.ipynb>`_
+
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/高级模型训练.ipynb>`_
+
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/高级模型训练.ipynb>`_
+
+在到目前为止的教程中，我们遵循了一个简单的训练模型的过程：加载数据集，创建模型，调用 `fit()` ，对其进行评估，并认为我们完成了。对于一个例子来说，这很好，但在真正的机器学习项目中，这个过程通常更复杂。在本教程中，我们将讨论训练模型的更实际的工作流程。
+
+超参数优化
+------------
+让我们从加载 HIV 数据集开始。它根据是否抑制艾滋病毒复制对超过4万个分子进行了分类。
+
+.. code-block:: Python
+
+    import deepchem as dc
+
+    tasks, datasets, transformers = dc.molnet.load_hiv(featurizer='ECFP', split='scaffold')
+    train_dataset, valid_dataset, test_dataset = datasets
+
+现在让我们用它来训练一个模型。我们将使用 `MultitaskClassifier` ，它只是一个密集层的堆栈。但是仍然有很多的选择。应该有多少层，每层应该有多少个神经元？我们应该使用什么 dropout rate？学习率是多少？
+
+这些被称为超参数。选择它们的标准方法是大量地尝试，在训练集中训练每个模型，并在验证集中评估它。这让我们知道哪种方法效果最好。
+
+你可以用手来做，但通常让电脑帮你做更容易。DeepChem 提供了一系列超参数优化算法，这些算法在 `dc.hyper` 库里。对于这个例子，我们将使用 `GridHyperparamOpt` ，这是最基本的方法。我们只是给它一个超参数选项的列表，它就会一个一个地尝试它们的所有组合。
+
+选项列表由我们提供的 `dict` 定义。对于模型的每个参数，我们提供一个列表来尝试。在这个例子中，我们考虑了三组可能的隐藏层：神经元为500的单层，神经元为1000的单层，或者神经元为1000的两层。我们还考虑了两个 drop out rate (20%和50%)和两个学习率(0.001和0.0001)。
+
+.. code-block:: Python
+
+    params_dict = {
+        'n_tasks': [len(tasks)],
+        'n_features': [1024],
+        'layer_sizes': [[500], [1000], [1000, 1000]],
+        'dropouts': [0.2, 0.5],
+        'learning_rate': [0.001, 0.0001]
+    }
+    optimizer = dc.hyper.GridHyperparamOpt(dc.models.MultitaskClassifier)
+    metric = dc.metrics.Metric(dc.metrics.roc_auc_score)
+    best_model, best_hyperparams, all_results = optimizer.hyperparam_search(
+            params_dict, train_dataset, valid_dataset, metric, transformers)
+
+`hyperparam_search()` 返回三个参数:它找到的最佳模型、该模型的超参数，以及每个模型的验证得分的完整列表。让我们来看看最后一个。
+
+.. code-block:: Python
+
+    print(all_results)
+
+我们可以看到一些通用规律。使用两个学习率较高的层并不十分有效。似乎更深的模型需要更小的学习率。我们还发现，20%的 dropout 通常比50%好。一旦我们根据这些观察结果缩小模型列表，所有验证分数都非常接近，可能接近到足以使剩余的变化主要是噪声。我们使用的剩余超参数集似乎没有太大区别，所以让我们任意选择一个具有神经元数为1000的单层，学习率为0.0001的模型。
+
+提前停止
+----------
+
+还有一个我们尚未考虑的重要超参数：我们训练模型的时间 `GridHyperparamOpt` 对每个模型进行固定的、相当少的轮次（epochs）训练。这不一定是最好的数字。
+
+你可能认为你训练的时间越长，你的模型就会越好，但这通常不是真的。如果训练时间过长，模型通常会过度拟合训练集的无关细节。你可以判断何时发生这种情况，因为验证集分数停止增加，甚至可能会减少，而训练集的分数继续提高。
+
+幸运的是，我们不需要为不同的步数训练许多次模型来确定最佳步数。我们只需要训练它一次，监视验证分数，并保留使它最大化的任何参数。这就是所谓的“提前停止”。DeepChem 的 `ValidationCallback` 类可以自动为我们完成这个操作。在下面的例子中，我们要求它每1000个训练步骤计算验证集的ROC AUC。如果你添加 `save_dir` 参数，它也会将最佳模型参数保存到硬盘。
+
+.. code-block:: Python
+
+    model = dc.models.MultitaskClassifier(n_tasks=len(tasks),
+                                        n_features=1024,
+                                        layer_sizes=[1000],
+                                        dropouts=0.2,
+                                        learning_rate=0.0001)
+    callback = dc.models.ValidationCallback(valid_dataset, 1000, metric)
+    model.fit(train_dataset, nb_epoch=50, callbacks=callback)
+
+学习率计划(Learning Rate Schedules)
+-----------------------------------
+
+在上面的例子中，我们在整个训练过程中使用了固定的学习率。在某些情况下，在训练过程中改变学习速度的效果更好。要在 DeepChem 中做到这一点，我们只需为 `learning_rate` 参数指定一个 `LearningRateSchedule` 对象而不是一个数字。在下面的例子中，我们会使用一个会指数下降的学习率。它从0.0002开始，然后在每走1000步之后乘以0.9。
+
+.. code-block:: Python
+
+    learning_rate = dc.models.optimizers.ExponentialDecay(0.0002, 0.9, 1000)
+    model = dc.models.MultitaskClassifier(n_tasks=len(tasks),
+                                        n_features=1024,
+                                        layer_sizes=[1000],
+                                        dropouts=0.2,
+                                        learning_rate=learning_rate)
+    model.fit(train_dataset, nb_epoch=50, callbacks=callback)
