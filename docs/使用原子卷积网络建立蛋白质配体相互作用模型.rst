@@ -1,11 +1,11 @@
-建立蛋白质-配体相互作用模型
+使用原子卷积网络建立蛋白质配体相互作用模型
 ===============================================
 
-`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Modeling_Protein_Ligand_Interactions.ipynb>`_
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Modeling_Protein_Ligand_Interactions_With_Atomic_Convolutions.ipynb>`_
 
-`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/建立蛋白质配体相互作用模型.ipynb>`_
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/使用原子卷积网络建立蛋白质配体相互作用模型.ipynb>`_
 
-`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/建立蛋白质配体相互作用模型.ipynb>`_
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/使用原子卷积网络建立蛋白质配体相互作用模型.ipynb>`_
 
 在本教程中，我们将带你了解如何使用机器学习和分子对接方法来预测蛋白质配体复合体的结合能。回想一下，配体是一种与蛋白质相互作用的小分子(通常是非共价的)。分子对接通过几何计算找到一种“结合构象”，小分子与蛋白质在合适的结合口袋中相互作用(也就是蛋白质上有凹槽的区域，小分子可以进入其中)。
 
