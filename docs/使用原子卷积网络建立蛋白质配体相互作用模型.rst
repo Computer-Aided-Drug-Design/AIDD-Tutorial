@@ -175,7 +175,7 @@ ACNN 直接利用分子的局部三维结构，通过端到端同时优化模型
 
     score = dc.metrics.Metric(dc.metrics.score_function.pearson_r2_score)
     for tvt, ds in zip(['train', 'val', 'test'], datasets):
-    print(tvt, acm.evaluate(ds, metrics=[score]))
+        print(tvt, acm.evaluate(ds, metrics=[score]))
 
 延伸阅读
 --------------
