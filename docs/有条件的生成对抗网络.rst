@@ -11,9 +11,9 @@
 
 numpy.einsum：推荐观看此 `视频 <https://www.bilibili.com/video/BV1XZ4y1Q7Ya/?spm_id_from=333.337.search-card.all.click&vd_source=4ce05641aa838b2a8f7ae5fd405de463>`_
 
-生成对抗网络（GAN）是一种生成模型。它由两个部分组成，分别是“生成器”和“鉴别器”。生成器接受随机值作为输入，并将它们转换为（希望）类似于训练数据的输出。鉴别器接受一组样本作为输入，并试图将真正的训练样本与生成器创建的样本区分开来。他们都是一起接受训练的。鉴别器试图越来越好地区分真实数据和虚假数据，而生成器则试图越来越好地欺骗鉴别器。
+生成对抗网络（GAN）是一种生成模型。它由两个部分组成，分别是“生成器”和“判别器”。生成器接受随机值作为输入，并将它们转换为（希望）类似于训练数据的输出。判别器接受一组样本作为输入，并试图将真正的训练样本与生成器创建的样本区分开来。他们都是一起接受训练的。判别器试图越来越好地区分真实数据和虚假数据，而生成器则试图越来越好地欺骗判别器。
 
-有条件的 GAN （CGAN）允许向生成器和鉴别器输入附加的输出条件。例如，这可能是一个类标签，GAN 试图了解类之间的数据分布如何变化。
+有条件的 GAN （CGAN）允许向生成器和判别器输入附加的输出条件。例如，这可能是一个类标签，GAN 试图了解类之间的数据分布如何变化。
 
 在本例中，我们将创建一个由一组分布在椭圆中的二维数据，每个椭圆的位置、形状和方向都是随机的。每个类对应于一个不同的椭圆。让我们随机生成椭圆。对于每一个，我们选择一个随机的中心位置，X 和 Y 的大小和旋转角度。然后我们创建一个变换矩阵将单位圆映射到椭圆。（具体做法，我也没搞清楚，反正下面代码会生成四组shape为(1000,2)的数据集，每一组数据集都是在一个特定椭圆的范围内，四组数据集代表着四个椭圆，这四个数据集保存在points中，也就是说points的shape为(4,1000,2)，这四个椭圆是随机生成的）
 
@@ -60,9 +60,9 @@ numpy.einsum：推荐观看此 `视频 <https://www.bilibili.com/video/BV1XZ4y1Q
 现在让我们为 CGAN 创建模型。DeepChem 的 GAN 类使这变得非常容易。我们只是创建它的子类并编程一些方法。其中最重要的两个是：
 
     * create_generator() 构建一个实现生成器的模型。该模型将一批随机噪声加上任何条件变量（在我们的例子中，每个样本的 one-hot 编码类）作为输入。它的输出是一个合成样本，应该与训练数据相似。
-    * create_discriminator() 构建一个实现鉴别器的模型。该模型将要评估的样本（可以是真实的训练数据，也可以是生成器创建的合成样本）和条件变量作为输入。它的输出是对应于每个样本的单个数字，这将被解释为样本是真实训练数据的概率。
+    * create_discriminator() 构建一个实现判别器的模型。该模型将要评估的样本（可以是真实的训练数据，也可以是生成器创建的合成样本）和条件变量作为输入。它的输出是对应于每个样本的单个数字，这将被解释为样本是真实训练数据的概率。
 
-在本例中，我们使用非常简单的模型。它们只是将输入连接在一起，并通过一些密集层。注意，鉴别器的最后一层使用了 sigmoid 激活函数。这确保它产生的输出在0到1之间，可以被解释为概率。
+在本例中，我们使用非常简单的模型。它们只是将输入连接在一起，并通过一些密集层。注意，判别器的最后一层使用了 sigmoid 激活函数。这确保它产生的输出在0到1之间，可以被解释为概率。
 
 我们还需要编码一些定义各种输入形状的方法。我们规定提供给生成器的每个随机噪声样本应该由10个数字组成；每个数据样本包含两个数字（对应一个点的二维X坐标和Y坐标）；条件输入由每个样本的 `n_classes` 数字组成（one-hot 编码类索引）。
 
@@ -106,10 +106,10 @@ numpy.einsum：推荐观看此 `视频 <https://www.bilibili.com/video/BV1XZ4y1Q
 .. code-block:: Python
 
     def iterbatches(batches):
-    for i in range(batches):
-        classes, points = generate_data(gan.batch_size)
-        classes = dc.metrics.to_one_hot(classes, n_classes)
-        yield {gan.data_inputs[0]: points, gan.conditional_inputs[0]: classes}
+        for i in range(batches):
+            classes, points = generate_data(gan.batch_size)
+            classes = dc.metrics.to_one_hot(classes, n_classes)
+            yield {gan.data_inputs[0]: points, gan.conditional_inputs[0]: classes}
 
     gan.fit_gan(iterbatches(5000))
 
