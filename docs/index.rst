@@ -29,3 +29,4 @@
     有条件的生成对抗网络
     在MNIST数据集上训练一个生成对抗网络
     LitMatter DeepChem
+    使用 hyperopt 高级模型训练

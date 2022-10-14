@@ -87,10 +87,10 @@ WGANs 没有这个问题。事实上，判别器变得越好，它提供的信�
 .. code-block:: Python
 
     def iterbatches(epochs):
-    for i in range(epochs):
-        for batch in dataset.iterbatches(batch_size=gan.batch_size):
-        yield {gan.data_inputs[0]: batch[0]}
-    gan.fit_gan(iterbatches(100), generator_steps=0.2, checkpoint_interval=5000)
+        for i in range(epochs):
+            for batch in dataset.iterbatches(batch_size=gan.batch_size):
+            yield {gan.data_inputs[0]: batch[0]}
+        gan.fit_gan(iterbatches(100), generator_steps=0.2, checkpoint_interval=5000)
 
 让我们生成一些数据，看看结果如何。
 
