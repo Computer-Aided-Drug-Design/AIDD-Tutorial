@@ -30,3 +30,5 @@
     在MNIST数据集上训练一个生成对抗网络
     LitMatter DeepChem
     使用 hyperopt 高级模型训练
+    高斯过程简介
+    与PytorchLightning结合
