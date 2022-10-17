@@ -1,0 +1,114 @@
+分子无监督嵌入学习
+==================================================================
+
+`Jupyter Notebook <https://github.com/deepchem/deepchem/blob/master/examples/tutorials/Learning_Unsupervised_Embeddings_for_Molecules.ipynb>`_
+
+`Jupyter Notebook 中文翻译版查看 <https://github.com/abdusemiabduweli/AIDD-Tutorial-Files/blob/main/DeepChem%20Jupyter%20Notebooks/分子无监督嵌入学习.ipynb>`_
+
+`Jupyter Notebook 中文翻译版下载 <https://abdusemiabduweli.github.io/AIDD-Tutorial-Files/DeepChem%20Jupyter%20Notebooks/分子无监督嵌入学习.ipynb>`_
+
+在本教程中，我们将使用 `SeqToSeq` 模型来生成用于分类分子的指纹。这是基于以下论文，尽管一些实现细节是不同的：Xu et al., "Seq2seq Fingerprint: An Unsupervised Deep Molecular Embedding for Drug Discovery" (https://doi.org/10.1145/3107411.3107424).
+
+使用SeqToSeq学习嵌入
+-------------------------
+
+许多类型的模型要求它们的输入具有固定的形状。由于分子所包含的原子和化学键的数量差异很大，因此很难将这些模型应用到分子上。我们需要一种方法为每个分子生成固定长度的“指纹”。为此设计了各种方法，例如我们在前面的教程中使用的扩展连接指纹(Extended-Connectivity prints, ECFPs)。但在这个例子中，我们将让 `SeqToSeq` 模型学习自己创建指纹的方法，而不是手工设计指纹。
+
+`SeqToSeq` 模型执行序列到序列的翻译。例如，它们经常被用来将文本从一种语言翻译成另一种语言。它由“编码器”和“解码器”两部分组成。编码器是一个循环层的堆栈。输入序列被输入到它中，一次一个token，它生成一个固定长度的向量，称为“嵌入向量”。解码器是执行反向操作的另一个循环层堆栈:它接受嵌入向量作为输入，并生成输出序列。通过对适当选择的输入/输出对进行训练，你可以创建一个执行多种转换的模型。
+
+在本例中，我们将使用描述分子的SMILES字符串作为输入序列。我们将把模型训练成一个自动编码器，这样它就会尝试使输出序列与输入序列相同。为此，编码器必须创建包含原始序列中所有信息的嵌入向量。这正是我们在指纹中想要的，所以也许这些嵌入向量将会在其他模型中作为一种表示分子的方式有用！
+
+让我们从加载数据开始。我们将使用MUV数据集。它在训练集中包含74501个分子，在验证集中包含9313个分子，因此它给我们提供了大量的SMILES字符串来处理。
+
+.. code-block:: Python
+
+    import deepchem as dc
+    tasks, datasets, transformers = dc.molnet.load_muv(split='stratified')
+    train_dataset, valid_dataset, test_dataset = datasets
+    train_smiles = train_dataset.ids
+    valid_smiles = valid_dataset.ids
+
+我们需要为 `SeqToSeq` 模型定义“字母表”，即可以出现在序列中的所有表示的列表。（输入和输出序列也可能具有不同的字母，但由于我们将其训练为自动编码器，所以在这种情况下它们是相同的。）列出在任何训练序列中出现的每个字符。
+
+.. code-block:: Python
+
+    tokens = set()
+    for s in train_smiles:
+    tokens = tokens.union(set(c for c in s))
+    tokens = sorted(list(tokens))
+
+创建模型并定义要使用的优化方法。在这种情况下，如果我们逐渐降低学习速度，学习效果会更好。我们使用 `ExponentialDecay` 在每次迭代后将学习率乘以0.9。
+
+.. code-block:: Python
+
+    from deepchem.models.optimizers import Adam, ExponentialDecay
+    max_length = max(len(s) for s in train_smiles)
+    batch_size = 100
+    batches_per_epoch = len(train_smiles)/batch_size
+    model = dc.models.SeqToSeq(tokens,
+                            tokens,
+                            max_length,
+                            encoder_layers=2,
+                            decoder_layers=2,
+                            embedding_dimension=256,
+                            model_dir='fingerprint',
+                            batch_size=batch_size,
+                            learning_rate=ExponentialDecay(0.001, 0.9, batches_per_epoch))
+
+让我们来训练它！ `fit_sequences()` 的输入是一个生成输入/输出对的生成器。在一个好的 GPU 上，这应该需要几个小时或更少的时间。
+
+.. code-block:: Python
+
+    def generate_sequences(epochs):
+        for i in range(epochs):
+            for s in train_smiles:
+                yield (s, s)
+
+    model.fit_sequences(generate_sequences(40))
+
+让我们看看它作为自动编码器的效果如何。我们将运行验证集中的前500个分子，看看其中有多少被精确复制。
+
+.. code-block:: Python
+
+    predicted = model.predict_from_sequences(valid_smiles[:500])
+        count = 0
+    for s,p in zip(valid_smiles[:500], predicted):
+        if ''.join(p) == s:
+            count += 1
+    print('reproduced', count, 'of 500 validation SMILES strings')
+
+现在我们试着用编码器来生成分子指纹。我们计算训练和验证数据集中所有分子的嵌入向量，并创建新的数据集，这些数据集的特征向量。数据量非常小，我们可以将所有数据都存储在内存中。
+
+.. code-block:: Python
+
+    import numpy as np
+    train_embeddings = model.predict_embeddings(train_smiles)
+    train_embeddings_dataset = dc.data.NumpyDataset(train_embeddings,
+                                                    train_dataset.y,
+                                                    train_dataset.w.astype(np.float32),
+                                                    train_dataset.ids)
+
+    valid_embeddings = model.predict_embeddings(valid_smiles)
+    valid_embeddings_dataset = dc.data.NumpyDataset(valid_embeddings,
+                                                    valid_dataset.y,
+                                                    valid_dataset.w.astype(np.float32),
+                                                    valid_dataset.ids)
+
+为了分类，我们将使用一个具有一个隐藏层的简单全连接网络。
+
+.. code-block:: Python
+
+    classifier = dc.models.MultitaskClassifier(n_tasks=len(tasks),
+                                                        n_features=256,
+                                                        layer_sizes=[512])
+    classifier.fit(train_embeddings_dataset, nb_epoch=10)
+
+看看它的效果如何。计算训练和验证数据集的 ROC AUC。
+
+.. code-block:: Python
+
+    metric = dc.metrics.Metric(dc.metrics.roc_auc_score, np.mean, mode="classification")
+    train_score = classifier.evaluate(train_embeddings_dataset, [metric], transformers)
+    valid_score = classifier.evaluate(valid_embeddings_dataset, [metric], transformers)
+    print('Training set ROC AUC:', train_score)
+    print('Validation set ROC AUC:', valid_score)
